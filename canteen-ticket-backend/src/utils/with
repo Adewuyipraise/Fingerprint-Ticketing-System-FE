@@ -1,0 +1,40 @@
+import pool from '../config/database.js';
+
+type AuditParams = {
+  zk_user_id: string;
+  action: string;
+  entity: string;
+  entity_id?: string;
+  details?: string;
+  ip_address?: string;
+};
+
+export const withAudit = async (
+  audit: AuditParams,
+  dbOperation: () => Promise<any>
+) => {
+  try {
+    // 1. Run main DB operation first
+    const result = await dbOperation();
+
+    // 2. Write audit log AFTER success
+    await pool.query(
+      `INSERT INTO audit_logs 
+       (zk_user_id, action, entity, entity_id, details, ip_address, timestamp) 
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+      [
+        audit.zk_user_id,
+        audit.action,
+        audit.entity,
+        audit.entity_id || null,
+        audit.details || null,
+        audit.ip_address || null,
+      ]
+    );
+
+    return result;
+  } catch (err) {
+    console.error('Operation failed:', err);
+    throw err;
+  }
+};
