@@ -45,3 +45,13 @@ dist/
 
 
 .exe
+
+# Build/installer output
+installer-output/
+*.exe
+# Installer / build output
+installer-output/
+*.exe
+build-output.txt
+
+build-output.txt

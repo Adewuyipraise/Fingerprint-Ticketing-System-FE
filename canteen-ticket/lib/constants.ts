@@ -27,6 +27,7 @@ export const DEPARTMENTS = [
   'Squaring',
   'Factory General',
   'Police',
+  'Intern',
 ] as const;
 
 export const POSITIONS = [

@@ -949,7 +949,20 @@ router.get('/reports/summary', authenticateToken, async (req: Request, res: Resp
 
 router.get('/tickets', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const { page = 1, per_page = 10000, start_date, end_date } = req.query;
+    const {
+      page = 1,
+      per_page = 10000,
+      start_date,
+      end_date,
+      zk_user_id,
+      search,
+      department,
+      date,
+    } = req.query as Record<string, string | undefined>;
+
+    // Defensive: reject the literal strings "undefined" / "null" / ""
+    const clean = (v?: string) =>
+      v && v !== 'undefined' && v !== 'null' && v.trim() !== '' ? v : undefined;
 
     const pageNum = Number(page) || 1;
     const pageSize = Number(per_page) || 10000;
@@ -959,26 +972,58 @@ router.get('/tickets', authenticateToken, async (req: Request, res: Response) =>
     const params: any[] = [];
     let paramIndex = 1;
 
-    // Date filtering for monthly reset support
-    if (start_date) {
-      whereClause += ` AND DATE(t.event_date AT TIME ZONE 'Africa/Lagos') >= $${paramIndex}`;
-      params.push(start_date);
-      paramIndex++;
-    }
-    if (end_date) {
-      whereClause += ` AND DATE(t.event_date AT TIME ZONE 'Africa/Lagos') <= $${paramIndex}`;
-      params.push(end_date);
+    const zkUserId   = clean(zk_user_id);
+    const dept       = clean(department);
+    const searchTerm = clean(search);
+    const dayFilter  = clean(date);
+    const startDate  = clean(start_date);
+    const endDate    = clean(end_date);
+
+    if (zkUserId && zkUserId !== 'all') {
+      whereClause += ` AND t.zk_user_id = $${paramIndex}`;
+      params.push(zkUserId);
       paramIndex++;
     }
 
-    // Get total count with filters
+    if (dept && dept !== 'all') {
+      whereClause += ` AND t.department = $${paramIndex}`;
+      params.push(dept);
+      paramIndex++;
+    }
+
+    if (searchTerm) {
+      whereClause += ` AND (
+        t.ticket_number ILIKE $${paramIndex}
+        OR t.zk_user_id  ILIKE $${paramIndex}
+        OR t.name        ILIKE $${paramIndex}
+      )`;
+      params.push(`%${searchTerm}%`);
+      paramIndex++;
+    }
+
+    if (dayFilter) {
+      whereClause += ` AND DATE(t.event_date AT TIME ZONE 'Africa/Lagos') = $${paramIndex}`;
+      params.push(dayFilter);
+      paramIndex++;
+    }
+
+    if (startDate) {
+      whereClause += ` AND DATE(t.event_date AT TIME ZONE 'Africa/Lagos') >= $${paramIndex}`;
+      params.push(startDate);
+      paramIndex++;
+    }
+    if (endDate) {
+      whereClause += ` AND DATE(t.event_date AT TIME ZONE 'Africa/Lagos') <= $${paramIndex}`;
+      params.push(endDate);
+      paramIndex++;
+    }
+
     const countResult = await pool.query(
       `SELECT COUNT(*) FROM tickets t ${whereClause}`,
       params
     );
     const total = Number(countResult.rows[0].count);
 
-    // Add date filter to main query
     params.push(pageSize, offset);
 
     const result = await pool.query(
@@ -994,14 +1039,11 @@ router.get('/tickets', authenticateToken, async (req: Request, res: Response) =>
         t.department,
         t.amount,
         u.position AS position,
-        -- Convert event_date (UTC TIMESTAMPTZ) to Africa/Lagos date
         (t.event_date AT TIME ZONE 'Africa/Lagos')::DATE as event_date_local,
-        -- Convert printed_at (UTC TIMESTAMPTZ) to Africa/Lagos date/time
         TO_CHAR(t.printed_at AT TIME ZONE 'Africa/Lagos', 'YYYY-MM-DD') as printed_date,
         TO_CHAR(t.printed_at AT TIME ZONE 'Africa/Lagos', 'HH24:MI:SS') as printed_time
       FROM tickets t
-      LEFT JOIN users u
-        ON u.zk_user_id = t.zk_user_id
+      LEFT JOIN users u ON u.zk_user_id = t.zk_user_id
       ${whereClause}
       ORDER BY t.event_date DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
@@ -1016,11 +1058,10 @@ router.get('/tickets', authenticateToken, async (req: Request, res: Response) =>
       per_page: pageSize,
       total_pages: Math.ceil(total / pageSize),
     });
-
   } catch (error) {
     console.error('Get tickets error:', error);
     res.status(500).json({ message: 'Error fetching tickets' });
   }
-});
+});;
 
 export default router;

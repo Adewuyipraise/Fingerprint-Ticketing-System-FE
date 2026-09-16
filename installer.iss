@@ -4,7 +4,7 @@
 
 [Setup]
 AppName=CanteenTrack
-AppVersion=1.0.1
+AppVersion=1.2.1
 DefaultDirName={commonpf}\CanteenTrack
 DefaultGroupName=CanteenTrack
 OutputDir=.\installer-output

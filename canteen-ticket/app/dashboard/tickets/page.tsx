@@ -2,11 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { History, Search, Filter, ChevronLeft, ChevronRight, Calendar, Shield, FileText, FileSpreadsheet } from 'lucide-react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
-import { saveAs } from 'file-saver';
+import { History, Search, Filter, ChevronLeft, ChevronRight, Calendar, Shield} from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -67,65 +63,7 @@ export default function RecordsPage() {
     return { date, time };
   };
 
-  const handleExportPdf = () => {
-    const doc = new jsPDF();
-    const title = 'CDK CanteenTrack - Meal Records';
-    doc.setFontSize(18);
-    doc.text(title, 14, 22);
 
-    const tableColumn = ['Ticket #', 'Employee ID', 'Name', 'Dept', 'Event', 'Date', 'Time', 'Amount'];
-    const tableRows = records.map((r: any) => {
-      // Use pre-computed local date/time fields from backend
-      const eventDate = r.event_date_local || splitDateTime(r.event_date).date;
-      const printedTime = r.printed_time || splitDateTime(r.printed_at).time;
-      return [
-        r.ticket_number,
-        r.zk_user_id,
-        r.name,
-        r.department,
-        r.event_name,
-        eventDate,
-        printedTime,
-        `₦${Number(r.amount || 0).toLocaleString()}`,
-      ];
-    });
-
-    autoTable(doc, {
-      head: [tableColumn],
-      body: tableRows,
-      startY: 45,
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [37, 99, 235] },
-    });
-
-    doc.save('meal-records.pdf');
-  };
-
-  const handleExportExcel = () => {
-    const data = records.map((r: any) => {
-      // Use pre-computed local date/time fields from backend
-      const eventDate = r.event_date_local || splitDateTime(r.event_date).date;
-      const printedDate = r.printed_date || splitDateTime(r.printed_at).date;
-      const printedTime = r.printed_time || splitDateTime(r.printed_at).time;
-      return {
-        'Ticket Number': r.ticket_number,
-        'Employee ID': r.zk_user_id,
-        'Name': r.name,
-        'Department': r.department,
-        'Event Name': r.event_name,
-        'Amount (₦)': Number(r.amount || 0),
-        'Recorded Date': printedDate,
-        'Recorded Time': printedTime,
-      };
-    });
-
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Records');
-    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-    const fileData = new Blob([excelBuffer], { type: 'application/octet-stream' });
-    saveAs(fileData, 'meal-records.xlsx');
-  };
 
   if (user && !hasPermission(user.role, 'tickets')) {
     return (
@@ -148,14 +86,7 @@ export default function RecordsPage() {
         description="Historical logs of all meal activities"
         icon={History}
         actions={
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleExportPdf} className="gap-2">
-              <FileText className="h-3.5 w-3.5" /> Export PDF
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleExportExcel} className="gap-2">
-              <FileSpreadsheet className="h-3.5 w-3.5" /> Export Excel
-            </Button>
-          </div>
+          <div className="flex gap-2"></div>
         }
       />
 

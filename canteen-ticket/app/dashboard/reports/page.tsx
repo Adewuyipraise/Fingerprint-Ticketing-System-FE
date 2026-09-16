@@ -30,15 +30,13 @@ const COLORS = ['#2563eb', '#16a34a', '#f59e0b', '#ef4444', '#8b5cf6', '#ec489a'
 const extractDateTimeFromTicket = (ticketNumber: string) => {
   let date = '';
   let time = '';
-  
+
   if (ticketNumber) {
     const parts = ticketNumber.split('-');
     // Format: EMP0325-2026-05-22-20:12:44:367
     if (parts.length >= 4) {
-      // Date: YYYY-MM-DD
       date = `${parts[1]}-${parts[2]}-${parts[3]}`;
-      
-      // Time: HH:MM:SS (remove milliseconds)
+
       if (parts[4]) {
         const timeParts = parts[4].split(':');
         if (timeParts.length >= 3) {
@@ -47,7 +45,7 @@ const extractDateTimeFromTicket = (ticketNumber: string) => {
       }
     }
   }
-  
+
   return { date, time };
 };
 
@@ -56,31 +54,29 @@ const fetchAllRecords = async (params: any) => {
   let allRecords: any[] = [];
   let currentPage = 1;
   const perPage = 1000;
-  
+
   while (true) {
     const response = await getRecords({
       ...params,
       per_page: perPage,
       page: currentPage,
     });
-    
+
     const records = response?.data ?? response?.data?.data ?? [];
-    
+
     if (!records || records.length === 0) break;
-    
+
     allRecords = [...allRecords, ...records];
-    
-    // Check if we've fetched all pages
-    const totalPages = response?.total_pages ?? response?.metadata?.total_pages ?? 
+
+    const totalPages = response?.total_pages ?? response?.metadata?.total_pages ??
                        Math.ceil((response?.total ?? records.length) / perPage);
-    
+
     if (currentPage >= totalPages) break;
     currentPage++;
-    
-    // Safety limit to prevent infinite loops
+
     if (currentPage > 100) break;
   }
-  
+
   return allRecords;
 };
 
@@ -93,31 +89,29 @@ export default function ReportsPage() {
   const [page, setPage] = useState(1);
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [isExporting, setIsExporting] = useState(false);
-  
+
   const perPage = 50;
-  
+
   // Default to current month
   const now = new Date();
   const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const defaultStartDate = firstDayOfMonth.toISOString().split('T')[0];
   const defaultEndDate = now.toISOString().split('T')[0];
   const todayDate = now.toISOString().split('T')[0];
-  
+
   const isAllTime = startDate === 'all' && endDate === 'all';
-  
-  // Calculate effective dates - ONLY when not in All Time mode
+
   let effectiveStartDate: string | undefined = undefined;
   let effectiveEndDate: string | undefined = undefined;
-  
+
   if (!isAllTime) {
     if (startDate && startDate !== 'all') {
       effectiveStartDate = startDate;
     } else if (!startDate && !endDate) {
-      // Current month default
       effectiveStartDate = defaultStartDate;
       effectiveEndDate = defaultEndDate;
     }
-    
+
     if (endDate && endDate !== 'all') {
       effectiveEndDate = endDate;
     } else if (!startDate && !endDate) {
@@ -125,10 +119,8 @@ export default function ReportsPage() {
     }
   }
 
-  // Build query parameters based on filters - ONLY include valid values
   const getQueryParams = () => {
     const params: any = {};
-    // Only add dates if they are valid strings
     if (effectiveStartDate && effectiveStartDate !== 'undefined') {
       params.start_date = effectiveStartDate;
     }
@@ -141,14 +133,12 @@ export default function ReportsPage() {
     return params;
   };
 
-  // QUERY 1: Fetch ALL records for accurate totals and charts
   const { data: allRecordsData, isLoading: allRecordsLoading } = useQuery({
     queryKey: ['tickets-all', effectiveStartDate, effectiveEndDate, selectedEmployee, isAllTime],
     queryFn: () => fetchAllRecords(getQueryParams()),
     staleTime: 0,
   });
 
-  // QUERY 2: Fetch paginated records for table view
   const { data: ticketsData, isLoading: ticketsLoading } = useQuery({
     queryKey: ['tickets-paginated', effectiveStartDate, effectiveEndDate, selectedEmployee, page],
     queryFn: () => getRecords({
@@ -159,7 +149,6 @@ export default function ReportsPage() {
     staleTime: 0,
   });
 
-  // QUERY 3: Fetch today's stats separately (always shows current day)
   const { data: todayRecords, isLoading: todayLoading } = useQuery({
     queryKey: ['tickets-today', todayDate],
     queryFn: () => fetchAllRecords({
@@ -169,18 +158,16 @@ export default function ReportsPage() {
     staleTime: 60000,
   });
 
-  // QUERY 4: Fetch employees for filter dropdown
   const { data: employeesData } = useQuery({
     queryFn: () => getEmployees({ search: employeeSearch, per_page: 100 }),
     queryKey: ['employees-search', employeeSearch],
   });
 
-  // Process all records for totals and charts
   const allRecords = useMemo(() => {
     const records = allRecordsData ?? [];
     return records.map((r: any) => {
       const { date: extractedDate, time: extractedTime } = extractDateTimeFromTicket(r.ticket_number);
-      
+
       return {
         ...r,
         id: r.id || r.ticket_number,
@@ -197,12 +184,11 @@ export default function ReportsPage() {
     });
   }, [allRecordsData]);
 
-  // Process paginated records for table display
   const paginatedRecords = useMemo(() => {
     const rawData = ticketsData?.data ?? ticketsData?.data?.data ?? [];
     return rawData.map((r: any) => {
       const { date: extractedDate, time: extractedTime } = extractDateTimeFromTicket(r.ticket_number);
-      
+
       return {
         ...r,
         id: r.id || r.ticket_number,
@@ -219,7 +205,6 @@ export default function ReportsPage() {
     });
   }, [ticketsData]);
 
-  // Process today's records
   const todayRecordsList = useMemo(() => {
     const records = todayRecords ?? [];
     return records.map((r: any) => {
@@ -232,7 +217,6 @@ export default function ReportsPage() {
     });
   }, [todayRecords]);
 
-  // Calculate totals from ALL records
   const totalMeals = allRecords.length;
   const totalAmount = allRecords.reduce((sum, r) => sum + (r.amount || 0), 0);
   const todayMeals = todayRecordsList.length;
@@ -240,14 +224,12 @@ export default function ReportsPage() {
   const averageMealValue = totalMeals > 0 ? Math.round(totalAmount / totalMeals) : 0;
   const uniqueEmployees = new Set(allRecords.map(r => r.zk_user_id)).size;
 
-  // Get selected employee name for display
   const selectedEmployeeName = useMemo(() => {
     if (selectedEmployee === 'all') return 'All Employees';
     const emp = employeesData?.data?.find(e => e.zk_user_id === selectedEmployee);
     return emp?.name || selectedEmployee;
   }, [selectedEmployee, employeesData]);
 
-  // Position distribution
   const positionData = useMemo(() => {
     const map: Record<string, { count: number; amount: number }> = {};
     allRecords.forEach((r: any) => {
@@ -263,7 +245,6 @@ export default function ReportsPage() {
       .sort((a, b) => b.count - a.count);
   }, [allRecords]);
 
-  // Daily meal trend
   const dailyMealData = useMemo(() => {
     const map: Record<string, number> = {};
     allRecords.forEach((r: any) => {
@@ -277,7 +258,6 @@ export default function ReportsPage() {
       .map(([date, count]) => ({ date, count }));
   }, [allRecords]);
 
-  // Daily amount trend
   const dailyAmountData = useMemo(() => {
     const map: Record<string, number> = {};
     allRecords.forEach((r: any) => {
@@ -291,7 +271,6 @@ export default function ReportsPage() {
       .map(([date, amount]) => ({ date, amount }));
   }, [allRecords]);
 
-  // Amount by position
   const amountByPosition = useMemo(() => {
     const map: Record<string, number> = {};
     allRecords.forEach((r: any) => {
@@ -301,7 +280,6 @@ export default function ReportsPage() {
     return map;
   }, [allRecords]);
 
-  // Individual employee report
   const employeeReport = useMemo(() => {
     const map: Record<string, { name: string; department: string; position: string; meal_count: number; total_amount: number }> = {};
     allRecords.forEach((r: any) => {
@@ -322,111 +300,331 @@ export default function ReportsPage() {
       .sort((a, b) => b.total_amount - a.total_amount);
   }, [allRecords]);
 
-  // Pagination
   const totalRecordsCount = ticketsData?.total ?? ticketsData?.data?.total ?? paginatedRecords.length;
   const totalPages = Math.ceil(totalRecordsCount / perPage);
 
-  // Export functions
-  const handleExportPdf = async () => {
+  // ============================================================
+  // SHARED EXPORT SCOPE BUILDER
+  // ============================================================
+  const buildExportScope = async () => {
+    // 1. Fetch employee list
+    let allEmployees: any[] = [];
+    try {
+      const res = await getEmployees({ search: '', per_page: 10000 });
+      allEmployees = res?.data ?? [];
+    } catch {
+      allEmployees = employeesData?.data ?? [];
+    }
+
+    // 2. Group records by employee
+    const recordsByEmployee = new Map<string, any[]>();
+    allRecords.forEach((r: any) => {
+      const key = String(r.zk_user_id || '').trim();
+      if (!key) return;
+      if (!recordsByEmployee.has(key)) recordsByEmployee.set(key, []);
+      recordsByEmployee.get(key)!.push(r);
+    });
+
+    // 3. Determine which employees to include
+    //    - If a single employee is selected: only that employee (block still shown even if 0 records).
+    //    - Otherwise: every employee from the full list, plus any IDs that appear in records but not in the list.
+    let scopedEmployees: any[] = [];
+
+    if (selectedEmployee !== 'all') {
+      // Find employee in list, else fall back to whatever exists in records
+      const found = allEmployees.find(
+        (e: any) => String(e.zk_user_id) === String(selectedEmployee)
+      );
+      if (found) {
+        scopedEmployees = [found];
+      } else {
+        const firstRecord = recordsByEmployee.get(String(selectedEmployee))?.[0];
+        scopedEmployees = [{
+          zk_user_id: selectedEmployee,
+          name: firstRecord?.name || selectedEmployee,
+          department: firstRecord?.department || '',
+          position: firstRecord?.position || '',
+        }];
+      }
+    } else {
+      const employeeMap = new Map<string, any>();
+      allEmployees.forEach((e: any) => {
+        const id = String(e.zk_user_id || '').trim();
+        if (id) employeeMap.set(id, e);
+      });
+      recordsByEmployee.forEach((_v, id) => {
+        if (!employeeMap.has(id)) {
+          const first = recordsByEmployee.get(id)![0];
+          employeeMap.set(id, {
+            zk_user_id: id,
+            name: first.name,
+            department: first.department,
+            position: first.position,
+          });
+        }
+      });
+      scopedEmployees = Array.from(employeeMap.values());
+    }
+
+    // 4. Sort by Employee ID ascending
+    scopedEmployees.sort((a, b) =>
+      String(a.zk_user_id).localeCompare(String(b.zk_user_id))
+    );
+
+    // 5. Grand totals (based on allRecords, which is already scoped by the active filters)
+    const grandTotalRecords = allRecords.length;
+    const grandTotalAmount = allRecords.reduce(
+      (sum: number, r: any) => sum + Number(r.amount || 0),
+      0
+    );
+
+    return { scopedEmployees, recordsByEmployee, grandTotalRecords, grandTotalAmount };
+  };
+
+  // ============================================================
+  // EXPORT EXCEL (grouped per employee)
+  // ============================================================
+  const handleExportExcel = async () => {
     setIsExporting(true);
     try {
-      const exportRecords = await fetchAllRecords(getQueryParams());
-      
-      const doc = new jsPDF();
-      const title = 'CDK CanteenTrack - Meal Consumption Report';
-      const dateRange = `Period: ${effectiveStartDate || 'All Time'} to ${effectiveEndDate || 'All Time'}`;
-      const employeeFilter = `Employee: ${selectedEmployeeName}`;
-      
-      doc.setFontSize(18);
-      doc.text(title, 14, 22);
-      doc.setFontSize(11);
-      doc.setTextColor(100);
-      doc.text(dateRange, 14, 30);
-      doc.text(employeeFilter, 14, 37);
-      
-      const exportTotalAmount = exportRecords.reduce((sum: number, r: any) => sum + (Number(r.amount) || 0), 0);
-      doc.setFontSize(12);
-      doc.setTextColor(0);
-      doc.text(`Total Records: ${exportRecords.length}`, 14, 47);
-      doc.text(`Total Amount: NGN ${exportTotalAmount.toLocaleString()}`, 14, 54);
-      
-      const tableColumn = ['Ticket #', 'Employee ID', 'Name', 'Dept', 'Position', 'Date', 'Time', 'Amount'];
-      const tableRows = exportRecords.map((r: any) => {
-        const { date, time } = extractDateTimeFromTicket(r.ticket_number);
-        return [
-          String(r.ticket_number || '').replace(/[^\w\-]/g, ''),
-          String(r.zk_user_id || ''),
-          String(r.name || '').replace(/[^\w\s]/g, ''),
-          String(r.department || '').replace(/[^\w\s]/g, ''),
-          String(r.position || ''),
-          date,
-          time,
-          `NGN ${(Number(r.amount) || 0).toLocaleString()}`,
-        ];
+      const { scopedEmployees, recordsByEmployee, grandTotalRecords, grandTotalAmount } =
+        await buildExportScope();
+
+      const periodLabel = isAllTime
+        ? 'All Time'
+        : `${startDate || 'All Time'} to ${endDate || 'All Time'}`;
+      const filterLabel =
+        selectedEmployee === 'all'
+          ? 'All Employees (grouped by employee)'
+          : `Employee: ${selectedEmployeeName} (${selectedEmployee})`;
+
+      const aoa: any[][] = [];
+
+      // Title block
+      aoa.push(['CDK CanteenTrack - Meal Consumption Report']);
+      aoa.push([`Period: ${periodLabel}`]);
+      aoa.push([`Filter: ${filterLabel}`]);
+      aoa.push([]);
+      aoa.push(['GRAND TOTAL RECORDS:', grandTotalRecords]);
+      aoa.push(['GRAND TOTAL AMOUNT (NGN):', grandTotalAmount]);
+      aoa.push([]);
+      aoa.push([]);
+
+      // Per-employee blocks
+      scopedEmployees.forEach((emp: any) => {
+        const empId = String(emp.zk_user_id || '').trim();
+        const empRecords = (recordsByEmployee.get(empId) || []).slice().sort((a, b) => {
+          const da = `${a.event_date || ''} ${a.event_time || ''}`;
+          const db = `${b.event_date || ''} ${b.event_time || ''}`;
+          return da.localeCompare(db);
+        });
+
+        const empSubtotal = empRecords.reduce(
+          (sum: number, r: any) => sum + Number(r.amount || 0),
+          0
+        );
+
+        aoa.push([
+          'Employee ID', empId,
+          'Name', emp.name || '',
+          'Department', emp.department || '',
+          'Position', emp.position || '',
+        ]);
+
+        aoa.push(['Ticket Number', 'Event Date', 'Event Time', 'Amount (NGN)']);
+
+        if (empRecords.length === 0) {
+          aoa.push(['No records in selected range', '', '', '']);
+        } else {
+          empRecords.forEach((r: any) => {
+            aoa.push([
+              r.ticket_number || '',
+              r.event_date || '',
+              r.event_time || '',
+              Number(r.amount || 0),
+            ]);
+          });
+        }
+
+        aoa.push([`Total for ${empId}:`, '', '', empSubtotal]);
+        aoa.push([]);
       });
-      
-      autoTable(doc, {
-        head: [tableColumn],
-        body: tableRows,
-        startY: 62,
-        styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak', font: 'helvetica' },
-        headStyles: { fillColor: [37, 99, 235], textColor: [255, 255, 255], fontStyle: 'bold' },
-        alternateRowStyles: { fillColor: [245, 245, 245] },
-        margin: { top: 62, left: 14, right: 14 },
+
+      // Bottom grand total
+      aoa.push([]);
+      aoa.push(['GRAND TOTAL RECORDS:', grandTotalRecords]);
+      aoa.push(['GRAND TOTAL AMOUNT (NGN):', grandTotalAmount]);
+
+      const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+
+      worksheet['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 7 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 7 } },
+        { s: { r: 2, c: 0 }, e: { r: 2, c: 7 } },
+      ];
+
+      worksheet['!cols'] = [
+        { wch: 22 },
+        { wch: 26 },
+        { wch: 18 },
+        { wch: 22 },
+        { wch: 18 },
+        { wch: 18 },
+        { wch: 18 },
+        { wch: 14 },
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Meal Report');
+
+      const excelBuffer = XLSX.write(workbook, {
+        bookType: 'xlsx',
+        type: 'array',
       });
-      
-      doc.save(`meal_report_${selectedEmployee !== 'all' ? selectedEmployee : 'all'}_${effectiveStartDate || 'all'}_to_${effectiveEndDate || 'all'}.pdf`);
-    } catch (error) {
-      console.error('PDF export failed:', error);
-      alert('Failed to export PDF. Please try again.');
+
+      const fileData = new Blob([excelBuffer], {
+        type: 'application/octet-stream',
+      });
+
+      const fileName = `meal_report_grouped_${startDate || 'all'}_${endDate || 'all'}.xlsx`;
+      saveAs(fileData, fileName);
     } finally {
       setIsExporting(false);
     }
   };
 
-  const handleExportExcel = async () => {
+  // ============================================================
+  // EXPORT PDF (grouped per employee)
+  // ============================================================
+  const handleExportPdf = async () => {
     setIsExporting(true);
     try {
-      const exportRecords = await fetchAllRecords(getQueryParams());
-      
-      const data = exportRecords.map((r: any) => {
-        const { date, time } = extractDateTimeFromTicket(r.ticket_number);
-        return {
-          'Ticket Number': r.ticket_number || '',
-          'Employee ID': r.zk_user_id || '',
-          'Name': r.name || '',
-          'Department': r.department || '',
-          'Position': r.position || '',
-          'Event Date': date,
-          'Event Time': time,
-          'Amount (NGN)': Number(r.amount || 0),
-        };
+      const { scopedEmployees, recordsByEmployee, grandTotalRecords, grandTotalAmount } =
+        await buildExportScope();
+
+      const periodLabel = isAllTime
+        ? 'All Time'
+        : `${startDate || 'All Time'} to ${endDate || 'All Time'}`;
+      const filterLabel =
+        selectedEmployee === 'all'
+          ? 'All Employees (grouped by employee)'
+          : `Employee: ${selectedEmployeeName} (${selectedEmployee})`;
+
+      const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 40;
+      let cursorY = 50;
+
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(20);
+      doc.text('CDK CanteenTrack - Meal Consumption Report', margin, cursorY);
+      cursorY += 22;
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(90);
+      doc.text(`Period: ${periodLabel}`, margin, cursorY);
+      cursorY += 14;
+      doc.text(`Filter: ${filterLabel}`, margin, cursorY);
+      cursorY += 20;
+
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(30);
+      doc.text(`GRAND TOTAL RECORDS: ${grandTotalRecords}`, margin, cursorY);
+      cursorY += 15;
+      doc.text(`GRAND TOTAL AMOUNT (NGN): ${grandTotalAmount.toLocaleString()}`, margin, cursorY);
+      cursorY += 22;
+
+      doc.setDrawColor(200);
+      doc.line(margin, cursorY, pageWidth - margin, cursorY);
+      cursorY += 16;
+
+      scopedEmployees.forEach((emp: any) => {
+        const empId = String(emp.zk_user_id || '').trim();
+        const empRecords = (recordsByEmployee.get(empId) || []).slice().sort((a, b) => {
+          const da = `${a.event_date || ''} ${a.event_time || ''}`;
+          const db = `${b.event_date || ''} ${b.event_time || ''}`;
+          return da.localeCompare(db);
+        });
+        const empSubtotal = empRecords.reduce(
+          (sum: number, r: any) => sum + Number(r.amount || 0),
+          0
+        );
+
+        // Page break check for the block header
+        if (cursorY + 70 > pageHeight - margin) {
+          doc.addPage();
+          cursorY = 50;
+        }
+
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(20);
+        const headerLine = `Employee ID: ${empId}   |   Name: ${emp.name || '-'}   |   Dept: ${emp.department || '-'}   |   Position: ${emp.position || '-'}`;
+        const headerLines = doc.splitTextToSize(headerLine, pageWidth - margin * 2);
+        headerLines.forEach((line: string) => {
+          doc.text(line, margin, cursorY);
+          cursorY += 13;
+        });
+        cursorY += 2;
+
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(70);
+        doc.text('Ticket Number', margin, cursorY);
+        doc.text('Event Date', margin + 220, cursorY);
+        doc.text('Event Time', margin + 310, cursorY);
+        doc.text('Amount (NGN)', margin + 400, cursorY);
+        cursorY += 12;
+
+        doc.setDrawColor(220);
+        doc.line(margin, cursorY - 2, pageWidth - margin, cursorY - 2);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(40);
+
+        if (empRecords.length === 0) {
+          doc.text('No records in selected range', margin, cursorY);
+          cursorY += 14;
+        } else {
+          empRecords.forEach((r: any) => {
+            if (cursorY > pageHeight - margin) {
+              doc.addPage();
+              cursorY = 50;
+            }
+            doc.text(String(r.ticket_number || ''), margin, cursorY);
+            doc.text(String(r.event_date || ''), margin + 220, cursorY);
+            doc.text(String(r.event_time || ''), margin + 310, cursorY);
+            doc.text(Number(r.amount || 0).toLocaleString(), margin + 400, cursorY);
+            cursorY += 14;
+          });
+        }
+
+        doc.setFont('helvetica', 'bold');
+        doc.text(`Total for ${empId}: ${empSubtotal.toLocaleString()} NGN`, margin, cursorY);
+        cursorY += 10;
+
+        doc.setDrawColor(200);
+        doc.line(margin, cursorY, pageWidth - margin, cursorY);
+        cursorY += 18;
+        doc.setFont('helvetica', 'normal');
       });
-      
-      const totalAmountSum = data.reduce((sum, r) => sum + r['Amount (NGN)'], 0);
-      data.push({
-        'Ticket Number': '',
-        'Employee ID': '',
-        'Name': '',
-        'Department': '',
-        'Position': '',
-        'Event Date': 'TOTAL',
-        'Event Time': '',
-        'Amount (NGN)': totalAmountSum,
-      });
-      
-      const worksheet = XLSX.utils.json_to_sheet(data);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Meal Report');
-      worksheet['!cols'] = Object.keys(data[0]).map(() => ({ wch: 20 }));
-      
-      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-      const fileData = new Blob([excelBuffer], { type: 'application/octet-stream' });
-      
-      saveAs(fileData, `meal_report_${selectedEmployee !== 'all' ? selectedEmployee : 'all'}_${effectiveStartDate || 'all'}_to_${effectiveEndDate || 'all'}.xlsx`);
-    } catch (error) {
-      console.error('Excel export failed:', error);
-      alert('Failed to export Excel. Please try again.');
+
+      if (cursorY > pageHeight - 80) {
+        doc.addPage();
+        cursorY = 50;
+      }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(30);
+      doc.text(`GRAND TOTAL RECORDS: ${grandTotalRecords}`, margin, cursorY);
+      cursorY += 15;
+      doc.text(`GRAND TOTAL AMOUNT (NGN): ${grandTotalAmount.toLocaleString()}`, margin, cursorY);
+
+      doc.save(`meal_report_grouped_${startDate || 'all'}_${endDate || 'all'}.pdf`);
     } finally {
       setIsExporting(false);
     }
@@ -443,7 +641,6 @@ export default function ReportsPage() {
 
   const hasFilters = startDate || endDate || selectedEmployee !== 'all';
 
-  // Access control
   if (!user || !hasPermission(user.role, 'reports')) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
@@ -467,26 +664,24 @@ export default function ReportsPage() {
         actions={
           user?.role !== 'canteen_rep' && (
             <div className="flex gap-2 no-print">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={handleExportPdf} 
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportPdf}
                 className="gap-2"
-                disabled={isExporting || allRecords.length === 0 || isAllTime}
-                title={isAllTime ? "Please select a date range for export" : "Export to PDF"}
+                disabled={isExporting || allRecords.length === 0}
               >
-                <FileText className="h-3.5 w-3.5" /> 
+                <FileText className="h-3.5 w-3.5" />
                 {isExporting ? 'Exporting...' : 'Export PDF'}
               </Button>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={handleExportExcel} 
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportExcel}
                 className="gap-2"
-                disabled={isExporting || allRecords.length === 0 || isAllTime}
-                title={isAllTime ? "Please select a date range for export" : "Export to Excel"}
+                disabled={isExporting || allRecords.length === 0}
               >
-                <FileSpreadsheet className="h-3.5 w-3.5" /> 
+                <FileSpreadsheet className="h-3.5 w-3.5" />
                 {isExporting ? 'Exporting...' : 'Export Excel'}
               </Button>
               <Button variant="outline" size="sm" onClick={handlePrint} className="gap-2">
@@ -502,12 +697,12 @@ export default function ReportsPage() {
         <div className="flex flex-wrap items-end gap-4">
           <div className="space-y-1.5">
             <Label className="text-xs text-slate-500">Date Range</Label>
-            <Select 
+            <Select
               value={(() => {
                 if (isAllTime) return "alltime";
                 if (!startDate && !endDate) return "current";
                 return "custom";
-              })()} 
+              })()}
               onValueChange={(v) => {
                 if (v === "current") {
                   setStartDate('');
@@ -612,11 +807,11 @@ export default function ReportsPage() {
           ) : (startDate && endDate && startDate !== 'all' && endDate !== 'all') ? (
             <span className="text-xs px-3 py-1 rounded-full bg-green-50 text-green-700">📅 {startDate} to {endDate}</span>
           ) : null}
-          
+
           {selectedEmployee !== 'all' && (
             <span className="text-xs px-3 py-1 rounded-full bg-indigo-50 text-indigo-700">👤 {selectedEmployeeName}</span>
           )}
-          
+
           {totalMeals > 0 && (
             <span className="text-xs px-3 py-1 rounded-full bg-slate-100 text-slate-600">
               🍽️ {totalMeals.toLocaleString()} meals • ₦{totalAmount.toLocaleString()}
@@ -671,7 +866,6 @@ export default function ReportsPage() {
           <TabsTrigger value="table">Report Table</TabsTrigger>
         </TabsList>
 
-        {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4">
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             <Card>
@@ -739,7 +933,6 @@ export default function ReportsPage() {
           </Card>
         </TabsContent>
 
-        {/* Charts Tab */}
         <TabsContent value="charts" className="space-y-4">
           <Card>
             <CardHeader className="pb-2">
@@ -826,7 +1019,6 @@ export default function ReportsPage() {
           </Card>
         </TabsContent>
 
-        {/* Financial Tab */}
         <TabsContent value="financial" className="space-y-4">
           <Card>
             <CardHeader>
@@ -883,7 +1075,6 @@ export default function ReportsPage() {
           </Card>
         </TabsContent>
 
-        {/* Individual Tab */}
         <TabsContent value="individual" className="space-y-4">
           <Card>
             <CardHeader>
@@ -926,7 +1117,6 @@ export default function ReportsPage() {
           </Card>
         </TabsContent>
 
-        {/* Table Tab */}
         <TabsContent value="table">
           <Card>
             <CardHeader className="pb-2">
@@ -968,7 +1158,7 @@ export default function ReportsPage() {
                       </tbody>
                     </table>
                   </div>
-                  
+
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between mt-4 pt-4 border-t">
                       <p className="text-xs text-slate-500">Showing {((page - 1) * perPage) + 1}–{Math.min(page * perPage, totalRecordsCount)} of {totalRecordsCount}</p>
